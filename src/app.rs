@@ -146,6 +146,7 @@ impl eframe::App for EmailApp {
                 ui.separator();
 
                 let mut to_delete: Option<usize> = None;
+                let mut to_clone: Option<usize> = None;
                 for (i, t) in self.templates.iter().enumerate() {
                     ui.horizontal(|ui| {
                         let label = if Some(i) == self.selected_template {
@@ -159,10 +160,23 @@ impl eframe::App for EmailApp {
                             self.new_recipient_args.clear();
                             self.preview_recipient_idx = None;
                         }
+                        if ui.small_button("📋").on_hover_text("Clone template").clicked() {
+                            to_clone = Some(i);
+                        }
                         if ui.small_button("🗑").clicked() {
                             to_delete = Some(i);
                         }
                     });
+                }
+
+                if let Some(clone_idx) = to_clone {
+                    let source = &self.templates[clone_idx];
+                    let mut cloned = source.clone();
+                    cloned.id = uuid::Uuid::new_v4().to_string();
+                    cloned.name = format!("{} - copy", source.name);
+                    self.templates.push(cloned);
+                    self.selected_template = Some(self.templates.len() - 1);
+                    self.save_templates();
                 }
 
                 if let Some(del) = to_delete {
