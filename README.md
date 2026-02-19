@@ -1,4 +1,4 @@
-# 📧 email-senderr
+# email-senderr
 
 A desktop application for sending personalized bulk emails with templates, per-recipient arguments, and file attachments — built entirely in Rust.
 
@@ -125,7 +125,7 @@ This template has three placeholders: `{name}`, `{company}`, and `{service}`.
 
 ### 2. Add Attachments (Optional)
 
-Click **📁 Add Attachment(s)** to open a file picker. Select one or more files. They will be listed with a **Remove** button next to each.
+Click ** Add Attachment(s)** to open a file picker. Select one or more files. They will be listed with a **Remove** button next to each.
 
 ### 3. Add Recipients
 
