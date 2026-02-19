@@ -36,16 +36,39 @@ pub fn build_message(
     );
     builder = builder.message_id(Some(msg_id));
 
-    if template.attachment_paths.is_empty() {
-        // Plain text email
-        Ok(builder.body(rendered_body)?)
-    } else {
-        // Multipart email with attachments
-        let mut multipart = MultiPart::mixed().singlepart(
+    // Convert plain newlines to <br> so line breaks are preserved in the email.
+    // HTML tags from the formatting toolbar (bold, italic, underline) pass through as-is.
+    let rendered_body_html = rendered_body.replace('\n', "<br>");
+
+    // Build the HTML body with a wrapper for proper email rendering
+    let html_body = format!(
+        "<!DOCTYPE html>\
+        <html><head><meta charset=\"UTF-8\"></head>\
+        <body style=\"font-family: Arial, sans-serif; font-size: 14px; color: #222;\">{}</body></html>",
+        rendered_body_html
+    );
+
+    // Build a plain-text fallback by stripping HTML tags
+    let plain_body = strip_html_tags(&rendered_body);
+
+    // Create an alternative part (plain + HTML) so email clients pick the best version
+    let alternative = MultiPart::alternative()
+        .singlepart(
             SinglePart::builder()
                 .header(ContentType::TEXT_PLAIN)
-                .body(rendered_body),
+                .body(plain_body),
+        )
+        .singlepart(
+            SinglePart::builder()
+                .header(ContentType::TEXT_HTML)
+                .body(html_body),
         );
+
+    if template.attachment_paths.is_empty() {
+        Ok(builder.multipart(alternative)?)
+    } else {
+        // Wrap alternative + attachments in a mixed multipart
+        let mut multipart = MultiPart::mixed().multipart(alternative);
 
         for path in &template.attachment_paths {
             if let Ok(file_bytes) = std::fs::read(path) {
@@ -152,5 +175,20 @@ fn chrono_timestamp() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+/// Simple HTML tag stripper for generating a plain-text fallback.
+fn strip_html_tags(html: &str) -> String {
+    let mut result = String::with_capacity(html.len());
+    let mut inside_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => inside_tag = true,
+            '>' => inside_tag = false,
+            _ if !inside_tag => result.push(c),
+            _ => {}
+        }
+    }
+    result
 }
 

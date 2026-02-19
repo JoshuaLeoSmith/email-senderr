@@ -10,6 +10,7 @@ Stop copy-pasting the same email over and over. Create a template once, add your
 
 - **Template Management** — Create, edit, and delete reusable email templates. Templates are automatically persisted to disk (`templates.json`).
 - **Placeholder Syntax** — Use `{placeholder}` tokens in the subject and body that get replaced with unique values for each recipient (e.g., `{name}`, `{company}`, `{role}`).
+- **Rich Text Formatting** — Format your email body with **bold**, *italic*, and <u>underline</u> using a built-in toolbar or keyboard shortcuts (`Ctrl+B`, `Ctrl+I`, `Ctrl+U`). You can also type HTML tags directly. Emails are sent as HTML with a plain-text fallback for maximum compatibility.
 - **File Attachments** — Attach one or more files to any template via a native file picker dialog. All recipients receive the same attachments.
 - **Recipient List** — Each template has its own list of recipients. Every recipient has an email address and a set of key-value arguments that map to placeholders.
 - **Inline Editing** — Edit recipient emails and argument values directly in the recipients grid.
@@ -105,13 +106,15 @@ Or run the compiled release binary directly:
 
 1. Type a name in the text field at the top of the left panel and click **+ New**.
 2. Fill in the **Subject** and **Body**. Use `{placeholder}` syntax for any values that should vary per recipient.
+3. Use the formatting toolbar above the body editor to apply **Bold**, *Italic*, or <u>Underline</u> formatting. You can also use keyboard shortcuts: `Ctrl+B`, `Ctrl+I`, `Ctrl+U`.
+4. You can type HTML tags directly in the body (e.g., `<b>bold text</b>`, `<a href="https://example.com">link</a>`).
 
 **Example body:**
 
 ```
-Hello {name},
+Hello <b>{name}</b>,
 
-I'm reaching out from {company} regarding your interest in {service}.
+I'm reaching out from <b>{company}</b> regarding your interest in <i>{service}</i>.
 I'd love to schedule a quick call to discuss how we can help.
 
 Best regards,
@@ -194,9 +197,10 @@ This application implements several measures to reduce the chance of emails bein
 
 1. **Proper Headers** — Every email includes `From`, `Reply-To`, `Message-ID`, and `Date` headers as recommended by RFC 5322.
 2. **Unique Message-ID** — Each email gets a globally unique `Message-ID` generated with UUID v4 + timestamp.
-3. **STARTTLS Encryption** — Connects to the SMTP server over an encrypted TLS connection.
-4. **Send Throttling** — A configurable delay (`send_delay_ms`) is applied between each email during bulk sends to avoid triggering rate limits.
-5. **Authenticated SMTP** — Uses proper credential-based authentication with the mail server.
+3. **HTML + Plain-Text (multipart/alternative)** — Every email includes both an HTML body and an auto-generated plain-text fallback, which is the format preferred by major email providers and reduces spam scoring.
+4. **STARTTLS Encryption** — Connects to the SMTP server over an encrypted TLS connection.
+5. **Send Throttling** — A configurable delay (`send_delay_ms`) is applied between each email during bulk sends to avoid triggering rate limits.
+6. **Authenticated SMTP** — Uses proper credential-based authentication with the mail server.
 
 > **Tip:** For best deliverability, keep your email content professional, avoid excessive links or images, and ensure your sending domain has proper SPF/DKIM/DMARC records configured.
 

@@ -232,16 +232,79 @@ impl eframe::App for EmailApp {
 
                     // --- Body ---
                     ui.label("Body (use {placeholder} for per-recipient variables):");
-                    if ui
+                    ui.label("Tip: Use the toolbar below to format text, or type HTML tags directly (e.g. <b>bold</b>).");
+                    ui.add_space(3.0);
+
+                    // --- Formatting Toolbar ---
+                    ui.horizontal(|ui| {
+                        if ui.button(egui::RichText::new(" B ").strong().size(14.0))
+                            .on_hover_text("Bold (wraps selection in <b></b>)")
+                            .clicked()
+                        {
+                            wrap_body_selection(&mut template.body, "<b>", "</b>");
+                            changed = true;
+                        }
+                        if ui.button(egui::RichText::new(" I ").italics().size(14.0))
+                            .on_hover_text("Italic (wraps selection in <i></i>)")
+                            .clicked()
+                        {
+                            wrap_body_selection(&mut template.body, "<i>", "</i>");
+                            changed = true;
+                        }
+                        if ui.button(egui::RichText::new(" U ").underline().size(14.0))
+                            .on_hover_text("Underline (wraps selection in <u></u>)")
+                            .clicked()
+                        {
+                            wrap_body_selection(&mut template.body, "<u>", "</u>");
+                            changed = true;
+                        }
+                        ui.separator();
+                        if ui.button("Link")
+                            .on_hover_text("Insert a hyperlink at cursor")
+                            .clicked()
+                        {
+                            template.body.push_str("<a href=\"URL\">link text</a>");
+                            changed = true;
+                        }
+                        if ui.button("• List Item")
+                            .on_hover_text("Insert a bullet point")
+                            .clicked()
+                        {
+                            template.body.push_str("\n• ");
+                            changed = true;
+                        }
+                    });
+
+                    ui.add_space(3.0);
+
+                    let body_edit = ui
                         .add(
                             egui::TextEdit::multiline(&mut template.body)
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(8)
                                 .hint_text("Hello {name},\n\nI wanted to reach out about..."),
-                        )
-                        .changed()
-                    {
+                        );
+                    if body_edit.changed() {
                         changed = true;
+                    }
+
+                    // Handle keyboard shortcuts for formatting (Ctrl+B, Ctrl+I, Ctrl+U)
+                    if body_edit.has_focus() {
+                        let modifiers = ui.input(|i| i.modifiers);
+                        if modifiers.ctrl || modifiers.command {
+                            if ui.input(|i| i.key_pressed(egui::Key::B)) {
+                                wrap_body_selection(&mut template.body, "<b>", "</b>");
+                                changed = true;
+                            }
+                            if ui.input(|i| i.key_pressed(egui::Key::I)) {
+                                wrap_body_selection(&mut template.body, "<i>", "</i>");
+                                changed = true;
+                            }
+                            if ui.input(|i| i.key_pressed(egui::Key::U)) {
+                                wrap_body_selection(&mut template.body, "<u>", "</u>");
+                                changed = true;
+                            }
+                        }
                     }
 
                     // Show detected placeholders
@@ -422,8 +485,14 @@ impl eframe::App for EmailApp {
                             ui.label(format!("Subject: {}", template.render_subject(r)));
                             ui.add_space(5.0);
                             ui.group(|ui| {
-                                ui.label(template.render_body(r));
+                                let rendered = template.render_body(r);
+                                render_html_preview(ui, &rendered);
                             });
+                            ui.add_space(3.0);
+                            ui.colored_label(
+                                egui::Color32::from_rgb(150, 150, 150),
+                                "(This is an approximate preview. The actual email may render slightly differently in Gmail.)"
+                            );
                             if !template.attachment_paths.is_empty() {
                                 ui.label(format!(
                                     "Attachments: {}",
@@ -487,5 +556,155 @@ impl eframe::App for EmailApp {
             }
         });
     }
+}
+
+/// Wraps text in the body with HTML tags. Since egui TextEdit doesn't expose
+/// selection ranges directly, this function appends empty tags at the end
+/// of the body so the user can type formatted content within them.
+fn wrap_body_selection(body: &mut String, open_tag: &str, close_tag: &str) {
+    // Append opening and closing tag so user can type between them
+    body.push_str(open_tag);
+    body.push_str(close_tag);
+}
+
+/// Renders a simple HTML preview in egui, supporting <b>, <i>, <u>, <a>, and <br> tags.
+/// This provides an approximate visual preview of how the email will look.
+fn render_html_preview(ui: &mut egui::Ui, html: &str) {
+    // Parse the HTML into segments with formatting info
+    let segments = parse_html_segments(html);
+
+    // Use a wrapping layout to render segments inline
+    ui.horizontal_wrapped(|ui| {
+        for segment in &segments {
+            if segment.is_newline {
+                ui.end_row();
+                continue;
+            }
+            let mut text = egui::RichText::new(&segment.text);
+            if segment.bold {
+                text = text.strong();
+            }
+            if segment.italic {
+                text = text.italics();
+            }
+            if segment.underline {
+                text = text.underline();
+            }
+            if segment.is_link {
+                text = text.color(egui::Color32::from_rgb(66, 133, 244));
+                text = text.underline();
+            }
+            ui.label(text);
+        }
+    });
+}
+
+#[derive(Debug)]
+struct HtmlSegment {
+    text: String,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    is_link: bool,
+    is_newline: bool,
+}
+
+/// Simple HTML parser that extracts text segments with their formatting state.
+fn parse_html_segments(html: &str) -> Vec<HtmlSegment> {
+    let mut segments = Vec::new();
+    let mut bold = false;
+    let mut italic = false;
+    let mut underline = false;
+    let mut is_link = false;
+    let mut current_text = String::new();
+    let mut chars = html.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '<' {
+            // Flush current text
+            if !current_text.is_empty() {
+                segments.push(HtmlSegment {
+                    text: current_text.clone(),
+                    bold,
+                    italic,
+                    underline,
+                    is_link,
+                    is_newline: false,
+                });
+                current_text.clear();
+            }
+
+            // Read the tag
+            let mut tag = String::new();
+            for tc in chars.by_ref() {
+                if tc == '>' {
+                    break;
+                }
+                tag.push(tc);
+            }
+            let tag_lower = tag.to_lowercase();
+
+            match tag_lower.as_str() {
+                "b" | "strong" => bold = true,
+                "/b" | "/strong" => bold = false,
+                "i" | "em" => italic = true,
+                "/i" | "/em" => italic = false,
+                "u" => underline = true,
+                "/u" => underline = false,
+                "/a" => is_link = false,
+                "br" | "br/" | "br /" => {
+                    segments.push(HtmlSegment {
+                        text: String::new(),
+                        bold: false,
+                        italic: false,
+                        underline: false,
+                        is_link: false,
+                        is_newline: true,
+                    });
+                }
+                t if t.starts_with("a ") || t == "a" => {
+                    is_link = true;
+                }
+                _ => {} // Ignore unknown tags
+            }
+        } else if c == '\n' {
+            // Flush current text before newline
+            if !current_text.is_empty() {
+                segments.push(HtmlSegment {
+                    text: current_text.clone(),
+                    bold,
+                    italic,
+                    underline,
+                    is_link,
+                    is_newline: false,
+                });
+                current_text.clear();
+            }
+            segments.push(HtmlSegment {
+                text: String::new(),
+                bold: false,
+                italic: false,
+                underline: false,
+                is_link: false,
+                is_newline: true,
+            });
+        } else {
+            current_text.push(c);
+        }
+    }
+
+    // Flush remaining text
+    if !current_text.is_empty() {
+        segments.push(HtmlSegment {
+            text: current_text,
+            bold,
+            italic,
+            underline,
+            is_link,
+            is_newline: false,
+        });
+    }
+
+    segments
 }
 
