@@ -1,47 +1,36 @@
-use config::Config;
-use std::collections::HashMap;
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{Message, SmtpTransport, Transport};
+mod app;
+mod config;
+mod email;
+mod template;
+
+use app::EmailApp;
+use config::SmtpConfig;
+use template::load_templates;
+
 fn main() {
-    let settings = Config::builder()
-        .add_source(config::File::with_name("src/Settings.toml"))
-        .build()
-        .unwrap()
-        .try_deserialize::<HashMap<String, String>>()
-        .unwrap();
+    let smtp_config = match SmtpConfig::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Failed to load Settings.toml: {}", e);
+            eprintln!("Please ensure src/Settings.toml exists with host, port, username, password, from_name fields.");
+            std::process::exit(1);
+        }
+    };
 
+    let templates = load_templates();
 
-    let from = format!("{} <{}>", settings.get("name").unwrap(), settings.get("username").unwrap());
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1100.0, 750.0])
+            .with_min_inner_size([800.0, 500.0]),
+        ..Default::default()
+    };
 
-    let email = Message::builder()
-        .from(from.parse().unwrap())
-        .to(settings.get("recipient").unwrap().parse().unwrap())
-        .subject("Test subject33333!!!")
-        .body(String::from("hello my friend id 3333333lke to say hi")).unwrap();
-
-    let creds = Credentials::new(
-        String::from(settings.get("username").unwrap()),
-        String::from(settings.get("password").unwrap()),
+    let _ = eframe::run_native(
+        "Bulk Email Sender",
+        options,
+        Box::new(move |_cc| {
+            Ok(Box::new(EmailApp::new(smtp_config, templates)))
+        }),
     );
-
-    let mailer = SmtpTransport::relay(settings.get("host").unwrap()).unwrap()
-        .credentials(creds)
-        .build();
-
-    // 4. Send the email
-    match mailer.send(&email) {
-        Ok(_) => println!("Email sent successfully!"),
-        Err(e) => panic!("Could not send email: {e:?}"),
-    }
-
 }
-
-
-// Requirements
-// hit google api and login
-// load template
-// load args
-// load attachments
-// load email mapped to name????
-// confirm???
-// send
